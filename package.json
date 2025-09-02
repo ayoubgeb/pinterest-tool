@@ -1,1 +1,17 @@
-Add package.json
+{
+  "name": "pinterest-kd-tool",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.0",
+    "lru-cache": "^10.4.3",
+    "playwright": "^1.47.2"
+  }
+}
