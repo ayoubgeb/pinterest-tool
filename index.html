@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pinterest Trend & KD – Private Dashboard</title>
+  <style>
+    :root { --bg:#0b0b0f; --card:#151521; --text:#eaeaf2; --muted:#a7a9be; --accent:#8ab4ff; }
+    body { margin:0; font-family:system-ui,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--text); }
+    .wrap { max-width:1100px; margin:40px auto; padding:0 16px; }
+    .card { background:var(--card); border-radius:16px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    h1 { font-size:26px; margin:0 0 12px; }
+    p { color:var(--muted); }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    input, button, select { border-radius:12px; border:1px solid #2a2a3a; background:#0f0f17; color:var(--text); padding:12px 14px; font-size:15px; }
+    button { cursor:pointer; }
+    .grid { display:grid; grid-template-columns: 60px 2fr 120px 120px 1fr; gap:10px; align-items:center; }
+    .th { color:#8c8fb3; font-weight:600; font-size:13px; }
+    .pin { background:#10101a; border:1px solid #222237; border-radius:14px; padding:10px; }
+    img.thumb { width:60px; height:60px; object-fit:cover; border-radius:10px; }
+    .tag { display:inline-flex; padding:4px 10px; border-radius:999px; background:#0e233d; color:#b9d2ff; font-size:12px; margin-left:8px; }
+    .ok { background:#0f3523; color:#8ff0b3; }
+    .bad { background:#35100f; color:#ffb3a6; }
+    .muted { color:var(--muted); font-size:13px; }
+    .footer { margin-top:24px; color:#8c8fb3; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Pinterest Trend & Keyword Difficulty</h1>
+      <p>Private tool to explore Pinterest topics, estimate keyword difficulty, and spot low-competition ideas.</p>
+      <div class="row" style="margin-top:12px;">
+        <input id="q" placeholder="Try: red glass nails" size="32" />
+        <select id="scrolls">
+          <option value="3" selected>Normal depth (3)</option>
+          <option value="5">Deeper (5)</option>
+          <option value="8">Deepest (8)</option>
+        </select>
+        <label class="muted"><input type="checkbox" id="login" /> Try login</label>
+        <button id="go">Analyze</button>
+        <button id="csv">Export CSV</button>
+      </div>
+
+      <div id="summary" style="margin-top:16px;"></div>
+
+      <div class="grid" style="margin-top:12px;">
+        <div class="th">Image</div>
+        <div class="th">Title</div>
+        <div class="th">Saves</div>
+        <div class="th">KD (est.)</div>
+        <div class="th">Link</div>
+      </div>
+      <div id="list" style="display:grid; gap:10px; margin-top:6px;"></div>
+
+      <div class="footer">Hint: Low KD + solid saves = great opportunity. Update selectors in server if extraction changes.</div>
+    </div>
+  </div>
+<script>
+const apiKey = ''; // if you set API_KEY in .env, put same here and send as header
+
+function badge(text, ok=true){
+  return `<span class="tag ${ok?'ok':'bad'}">${text}</span>`
+}
+
+function renderSummary(d){
+  const { query, loadedPins, keywordDifficulty, lowCompetition } = d;
+  const tags = [
+    `<span class="tag">Pins: ${loadedPins}</span>`,
+    `<span class="tag">KD: ${keywordDifficulty}</span>`,
+    lowCompetition ? badge('Low competition', true) : badge('Competitive', false)
+  ].join(' ');
+  document.getElementById('summary').innerHTML = `<div class="row"><div><strong>Query:</strong> ${query}</div><div>${tags}</div></div>`;
+}
+
+function renderList(pins, kd){
+  const root = document.getElementById('list');
+  root.innerHTML = '';
+  pins.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'pin grid';
+    el.innerHTML = `
+      <img class="thumb" src="${p.image}" alt=""/>
+      <div>${p.title || '<span class="muted">(no title)</span>'}</div>
+      <div>${p.saves ?? 0}</div>
+      <div>${kd}</div>
+      <div><a href="${p.url}" target="_blank">Open</a></div>
+    `;
+    root.appendChild(el);
+  });
+}
+
+async function analyze(){
+  const q = document.getElementById('q').value.trim();
+  const scrolls = document.getElementById('scrolls').value;
+  const login = document.getElementById('login').checked ? '1' : '0';
+  if (!q) return alert('Enter a query');
+  const res = await fetch(`/api/pinterest?q=${encodeURIComponent(q)}&scrolls=${scrolls}&login=${login}`, {
+    headers: apiKey ? { 'x-api-key': apiKey } : {}
+  });
+  const json = await res.json();
+  if (!json.ok) { alert(json.error || 'Error'); return; }
+  const data = json.data;
+  renderSummary(data);
+  renderList(data.sample, data.keywordDifficulty);
+  window.__last = data;
+}
+
+function exportCSV(){
+  const data = window.__last; if (!data) return alert('Analyze first');
+  const rows = [['query','kd','loadedPins','title','saves','url','image']];
+  data.sample.forEach(p=>rows.push([data.query, data.keywordDifficulty, data.loadedPins, p.title, p.saves, p.url, p.image]));
+  const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${data.query.replace(/\s+/g,'_')}-pinterest.csv`;
+  a.click();
+}
+
+document.getElementById('go').addEventListener('click', analyze);
+document.getElementById('csv').addEventListener('click', exportCSV);
+</script>
+</body>
+</html>
