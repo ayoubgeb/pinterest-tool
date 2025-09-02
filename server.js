@@ -4,7 +4,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { chromium } from 'playwright';
-import LRU from 'lru-cache';
+import { LRUCache } from 'lru-cache'; // <-- fixed import
 
 dotenv.config();
 
@@ -28,7 +28,7 @@ const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 app.use('/api/', limiter);
 
 // Cache to avoid hammering Pinterest
-const cache = new LRU({ max: 200, ttl: 1000 * 60 * 30 }); // 30 min TTL
+const cache = new LRUCache({ max: 200, ttl: 1000 * 60 * 30 }); // 30 min TTL
 
 // Helper: compute simple difficulty score (0-100)
 function computeKD(pins, loadedCount) {
@@ -72,6 +72,7 @@ async function pinterestSearch({ query, scrolls = 3, login = false }) {
     const url = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
+    // Scroll to load more pins
     for (let i = 0; i < scrolls; i++) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await page.waitForTimeout(1500 + Math.floor(Math.random() * 1000));
@@ -141,7 +142,6 @@ app.get('/api/pinterest', async (req, res) => {
     const login = req.query.login === '1';
 
     const data = await pinterestSearch({ query, scrolls, login });
-
     res.json({ ok: true, data });
   } catch (err) {
     console.error(err);
@@ -154,3 +154,4 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
