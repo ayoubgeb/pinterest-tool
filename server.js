@@ -4,7 +4,9 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { chromium } from 'playwright';
-import { LRUCache } from 'lru-cache'; // <-- fixed import
+import LRU from 'lru-cache';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -15,6 +17,15 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 app.use(express.static('public'));
+
+// For resolving paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve your index.html at root
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Simple API key gate (optional)
 app.use('/api', (req, res, next) => {
@@ -28,7 +39,7 @@ const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 app.use('/api/', limiter);
 
 // Cache to avoid hammering Pinterest
-const cache = new LRUCache({ max: 200, ttl: 1000 * 60 * 30 }); // 30 min TTL
+const cache = new LRU({ max: 200, ttl: 1000 * 60 * 30 }); // 30 min TTL
 
 // Helper: compute simple difficulty score (0-100)
 function computeKD(pins, loadedCount) {
@@ -36,7 +47,7 @@ function computeKD(pins, loadedCount) {
   const avgSaves = top.length
     ? top.reduce((s, p) => s + (p.saves || 0), 0) / top.length
     : 0;
-  const pop = Math.min(1, avgSaves / 500); // 500+ avg saves ~ maxed
+  const pop = Math.min(1, avgSaves / 500);
   const comp = Math.min(1, loadedCount / 1000);
   return Math.round((0.6 * comp + 0.4 * pop) * 100);
 }
@@ -142,6 +153,7 @@ app.get('/api/pinterest', async (req, res) => {
     const login = req.query.login === '1';
 
     const data = await pinterestSearch({ query, scrolls, login });
+
     res.json({ ok: true, data });
   } catch (err) {
     console.error(err);
