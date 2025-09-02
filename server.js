@@ -4,7 +4,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { chromium } from 'playwright';
-import LRU from 'lru-cache';
+import { LRUCache } from 'lru-cache';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,30 +18,30 @@ app.use(express.json());
 app.use(cors());
 app.use(express.static('public'));
 
-// For resolving paths
+// Resolve paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve your index.html at root
-app.get('/', (req, res) => {
+// Serve index.html at root
+app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Simple API key gate (optional)
+// Optional API key gate
 app.use('/api', (req, res, next) => {
-  if (!API_KEY) return next(); // disabled
+  if (!API_KEY) return next(); // disabled if empty
   if (req.headers['x-api-key'] === API_KEY) return next();
   return res.status(401).json({ error: 'Unauthorized' });
 });
 
-// Basic rate limit
+// Basic rate limiter
 const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 app.use('/api/', limiter);
 
 // Cache to avoid hammering Pinterest
-const cache = new LRU({ max: 200, ttl: 1000 * 60 * 30 }); // 30 min TTL
+const cache = new LRUCache({ max: 200, ttl: 1000 * 60 * 30 }); // 30 min TTL
 
-// Helper: compute simple difficulty score (0-100)
+// Helper: compute simple keyword difficulty (0-100)
 function computeKD(pins, loadedCount) {
   const top = pins.slice(0, 20);
   const avgSaves = top.length
@@ -83,7 +83,6 @@ async function pinterestSearch({ query, scrolls = 3, login = false }) {
     const url = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
-    // Scroll to load more pins
     for (let i = 0; i < scrolls; i++) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await page.waitForTimeout(1500 + Math.floor(Math.random() * 1000));
@@ -122,6 +121,7 @@ async function pinterestSearch({ query, scrolls = 3, login = false }) {
           saves
         });
       });
+
       return results;
     });
 
@@ -144,6 +144,7 @@ async function pinterestSearch({ query, scrolls = 3, login = false }) {
   }
 }
 
+// API route
 app.get('/api/pinterest', async (req, res) => {
   try {
     const query = (req.query.q || '').toString().trim();
@@ -161,9 +162,10 @@ app.get('/api/pinterest', async (req, res) => {
   }
 });
 
+// Healthcheck
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
-
